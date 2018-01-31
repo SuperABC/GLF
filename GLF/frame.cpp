@@ -26,7 +26,7 @@ void renderGlobe() {
 	elementShader->setMat4("u_projection", projection);
 	elementShader->setMat4("u_view", view);
 	elementShader->setVec3("u_eyePos", eye->pos);
-	for (int i = 0; i < light.size(); i++) {
+	for (unsigned int i = 0; i < light.size(); i++) {
 		char tmp[64];
 		sprintf(tmp, "u_lightsMatrix[%d]", i);
 		elementShader->setMat4(tmp, light[i]->lightMatrix);
@@ -43,7 +43,7 @@ void renderGlobe() {
 	texShader->setMat4("u_projection", projection);
 	texShader->setMat4("u_view", view);
 	texShader->setVec3("u_eyePos", eye->pos);
-	for (int i = 0; i < light.size(); i++) {
+	for (unsigned int i = 0; i < light.size(); i++) {
 		char tmp[64];
 		sprintf(tmp, "u_lightsMatrix[%d]", i);
 		texShader->setMat4(tmp, light[i]->lightMatrix);
@@ -58,7 +58,7 @@ void renderGlobe() {
 	}
 	int ln = light.size();
 	for (int i = 0; i < ln; i++) {
-		glActiveTexture(GL_TEXTURE1 + i);
+		glActiveTexture(GL_TEXTURE2 + i);
 		glBindTexture(GL_TEXTURE_2D, light[i]->textureHandle);
 	}
 	for (auto s : globe) {
@@ -146,9 +146,10 @@ static void GLFKeyUp(unsigned char cAscii, int x, int y) {
 
 void build() {
 	static Scene tmp;
-	tmp.elements.push_back(*Element(true, glm::vec3(1.f), glm::vec3(1.2f)).load("source//castle.obj"));
-	tmp.elements.push_back(*Element().load("source//ground.obj"));
-	tmp.textures.push_back(*Texture().load("source//pic.obj"));
+	tmp.elements.push_back((new Element(true, glm::vec3(1.f), glm::vec3(1.2f)))->load("source//castle.obj"));
+	//tmp.elements[0]->model = glm::translate(glm::mat4(), glm::vec3(0, -5, 0));
+	tmp.elements.push_back((new Element())->load("source//ground.obj"));
+	tmp.textures.push_back((new Texture())->load("source//pic.obj"));
 	globe.push_back(&tmp);
 	light.push_back(new Light(0, glm::vec3(-24.f, 32.f, 18.f), glm::vec3(.7f, .7f, .7f), glm::vec3(.2f, .2f, .2f), .6f));
 	light.push_back(new Light(1, glm::vec3(24.f, 20.f, -18.f), glm::vec3(.3f, .3f, .3f), glm::vec3(.1f, .1f, .1f), .4f));
