@@ -17,13 +17,16 @@ struct Light {
 	vec3 u_lightAmb;
 	float u_lightSpec;
 };
-
-uniform sampler2D u_shadowMap[MAX_LIGHT];
-uniform vec3 u_eyePos;
-
 uniform int u_enLight;
 uniform int u_lightNum;
 uniform Light u_lightInfo[MAX_LIGHT];
+
+uniform int u_enBump;
+uniform sampler2D u_shadowMap[MAX_LIGHT];
+uniform sampler2D u_bumpMap;
+
+uniform vec3 u_eyePos;
+
 
 float ShadowCalculation(vec4 posFromLight, int idx) {
     vec3 projCoords = posFromLight.xyz / posFromLight.w;
