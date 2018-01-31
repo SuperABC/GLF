@@ -12,4 +12,5 @@ vt 0.0 1.0
 
 usemtl pic
 f 1/1 2/2 3/3
+usemtl pic2
 f 1/1 3/3 4/4
