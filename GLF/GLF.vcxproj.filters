@@ -21,15 +21,18 @@
     <Filter Include="头文件\geometry">
       <UniqueIdentifier>{7b5e1198-6b37-4be5-8263-ee990f1d253e}</UniqueIdentifier>
     </Filter>
+    <Filter Include="头文件\effect">
+      <UniqueIdentifier>{424f97b8-1375-4df0-b1db-498bcc8032c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\effect">
+      <UniqueIdentifier>{2c415d19-0a52-475b-b383-1033d1f4156f}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="eye.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="light.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="main.h">
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="model.h">
@@ -49,6 +52,9 @@
     </ClInclude>
     <ClInclude Include="geometry\shape.h">
       <Filter>头文件\geometry</Filter>
+    </ClInclude>
+    <ClInclude Include="main.h">
+      <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
