@@ -1,7 +1,10 @@
 #ifndef GLF_MODEL
 #define GLF_MODEL
 #include "main.h"
+#include <utility>
 #include <atlimage.h>
+
+using std::pair;
 
 class Bitmap {
 public:
@@ -23,7 +26,6 @@ private:
 	struct Material {
 		string name;
 		glm::vec3 kd, ka, ks;
-		Bitmap src;
 	};
 	vector<Material> surface;
 	int active = -1;
@@ -31,8 +33,9 @@ private:
 	glm::vec3 kd, ka;
 	float ks;
 
-	bool diy = false;
-	bool pure = false;
+	bool diy = false;//Enable light feature.
+	bool pure = false;//Draw pure color.
+	bool bump = false;//Enable bump map.
 
 	void pushPos(float pos1 = 0, float pos2 = 0, float pos3 = 0) {
 		pos.push_back(pos1);
@@ -133,7 +136,8 @@ private:
 	vector<float> coord;
 	vector<float> normal;
 
-	GLuint vao, svao, texName;
+	GLuint vao, svao;
+	vector<GLuint> texName;
 	GLuint vboHandles[3],
 		positionBufferHandle, coordBufferHandle, normalBufferHandle;
 	GLuint spositionBufferHandle;
@@ -141,8 +145,21 @@ private:
 	glm::vec3 kd, ka;
 	float ks;
 
-	bool diy = false;
-	bool pure = false;
+	bool diy = false;//Enable light feature.
+	bool pure = false;//Draw pure color.
+	bool bump = false;//Enable bump map.
+
+	class texStr {
+	public:
+		bool pure;
+		string texDir = "";
+		float *Kd = NULL;
+		float *Ka = NULL;
+		float *Ks = NULL;
+
+		texStr(string dir) :texDir(dir), pure(false) {}
+		texStr(float *d, float *a, float *s) :Kd(d), Ka(a), Ks(s), pure(true) {}
+	};
 
 	void pushPos(float pos1 = 0, float pos2 = 0, float pos3 = 0) {
 		pos.push_back(pos1);
@@ -167,12 +184,11 @@ private:
 	float *getNormal() {
 		return toArray<float>(&normal);
 	}
-
-	friend class Mix;
-
-	void pic(const char *fileName);
+	
+	void pic(texStr s);
 public:
 	vector<Bitmap> src;
+	vector<pair<int, int>> offset;
 
 	glm::mat4 model;
 
@@ -189,7 +205,6 @@ public:
 		coordBufferHandle = vboHandles[1];
 		normalBufferHandle = vboHandles[2];
 		glGenBuffers(1, &spositionBufferHandle);
-		glGenTextures(1, &texName);
 
 		this->diy = diy;
 		kd = d;
@@ -207,41 +222,14 @@ public:
 	void shadow();
 	void show();
 };
-class Mix {
-private:
-	glm::vec3 kd, ka;
-	float ks;
-
-	bool diy = false;
-public:
-	Element element;
-	Texture texture;
-
-	glm::mat4 model;
-
-	Mix(bool diy = false,
-		glm::vec3 d = glm::vec3(0.0, 0.0, 0.0), glm::vec3 a = glm::vec3(0.0, 0.0, 0.0),
-		float s = 0) {
-		this->diy = diy;
-		kd = d;
-		ka = a;
-		ks = s;
-	}
-	~Mix() {}
-
-	Mix *load(const char *filename);
-	void shadow();
-	void show();
-};
 
 class Scene {
 public:
 	string name;
 	bool active;
 
-	vector<Element> elements;
-	vector<Texture> textures;
-	vector<Mix> mixes;
+	vector<Element*> elements;
+	vector<Texture*> textures;
 
 	Scene() { active = true; };
 	~Scene() {};
