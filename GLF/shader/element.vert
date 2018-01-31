@@ -14,13 +14,14 @@ out vec4 v_PosFromLight[MAX_LIGHT];
 uniform mat4 u_projection;
 uniform mat4 u_view;
 uniform mat4 u_modelMatrix;
+uniform mat4 u_normalMatrix;
 
 uniform int u_lightNum;
 uniform mat4 u_lightsMatrix[MAX_LIGHT];
 
 void main() {
     v_Position = (u_modelMatrix * vec4(a_Position, 1.0)).xyz;
-    v_Normal = a_Normal;
+    v_Normal =  (u_normalMatrix * vec4(a_Normal, 1.0)).xyz;
     v_Color = a_Color;
 
 	for(int i = 0; i < u_lightNum; i++) {
