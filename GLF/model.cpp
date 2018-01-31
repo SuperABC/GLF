@@ -199,8 +199,10 @@ void Element::show() {
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), NULL);
 	glBindVertexArray(0);
 
+	elementShader->setInt("u_enBump", bump);
+
 	if(diy){
-		for (int i = 0; i < light.size(); i++) {
+		for (unsigned int i = 0; i < light.size(); i++) {
 			char tmp[64];
 			sprintf(tmp, "u_lightInfo[%d].u_lightDiff", i);
 			elementShader->setVec3(tmp, kd * light[i]->diffuse);
@@ -213,16 +215,18 @@ void Element::show() {
 
 	elementShader->setInt("u_enLight", !pure);
 	elementShader->setMat4("u_modelMatrix", model);
-	for (int i = 0; i < light.size(); i++) {
+	glm::mat4x4 inv = glm::transpose(glm::inverse(model));
+	elementShader->setMat4("u_normalMatrix", inv);
+	for (unsigned int i = 0; i < light.size(); i++) {
 		char tmp[64];
 		sprintf(tmp, "u_shadowMap[%d]", i);
-		elementShader->setInt(tmp, i+1);
+		elementShader->setInt(tmp, i+2);
 	}
 	glBindVertexArray(vao);
 	glDrawArrays(GL_TRIANGLES, 0, pos.size() / 3);
 
 	if (diy) {
-		for (int i = 0; i < light.size(); i++) {
+		for (unsigned int i = 0; i < light.size(); i++) {
 			char tmp[64];
 			sprintf(tmp, "u_lightInfo[%d].u_lightDiff", i);
 			elementShader->setVec3(tmp, light[i]->diffuse);
@@ -234,11 +238,28 @@ void Element::show() {
 	}
 }
 
-void Texture::pic(const char *fileName) {
+void Texture::pic(texStr s) {
+	const char *fileName = s.texDir.c_str();
+
 	CImage *img = new CImage;
 	if (!fileName) {
 		return;
 	}
+
+	if (s.pure == true) {
+		Bitmap bmp;
+		bmp.sizeX = 1;
+		bmp.sizeY = 1;
+		bmp.data = new unsigned char[3];
+
+		bmp.data[0] = char(s.Kd[0] * 255);
+		bmp.data[1] = char(s.Kd[1] * 255);
+		bmp.data[2] = char(s.Kd[2] * 255);
+
+		src.push_back(bmp);
+		return;
+	}
+
 	HRESULT hr = img->Load(fileName);
 	if (!SUCCEEDED(hr)) {
 		return;
@@ -265,7 +286,7 @@ Texture *Texture::load(const char *filename) {
 	vector<float>normal;
 
 	vector<string> texName;
-	vector<string> texDir;
+	vector<texStr> texInfo;
 
 	while (fin >> op) {
 		if (op == "v") {
@@ -358,25 +379,46 @@ Texture *Texture::load(const char *filename) {
 			bool complete = true;
 			while (min >> op) {
 				if (op == "newmtl") {
-					if (!complete)texDir.push_back("");
+					if (!complete)texInfo.push_back(texStr(""));
 					min >> op;
 					texName.push_back(op);
 					complete = false;
 				}
-				else if (op == "src") {
-					if (complete)texName.push_back("");
+				else if (op == "map_Kd") {
+					assert(!complete);
 					min >> op;
-					texDir.push_back(op);
+					texInfo.push_back(texStr(op));
 					complete = true;
 				}
-				else continue;
+				else if (op == "Kd") {
+					min >> num1 >> num2 >> num3;
+					if (complete) {
+						texInfo[texInfo.size() - 1].Kd[0] = num1;
+						texInfo[texInfo.size() - 1].Kd[1] = num2;
+						texInfo[texInfo.size() - 1].Kd[2] = num3;
+					}
+					else {
+						float *tmp = new float[4];
+						tmp[0] = num1;
+						tmp[1] = num2;
+						tmp[2] = num3;
+						texInfo.push_back(texStr(tmp, NULL, NULL));
+						complete = true;
+					}
+				}
+				else {
+					char *buf = new char[256];
+					min.getline(buf, 256);
+					delete buf;
+				}
 			}
 		}
 		else if (op == "usemtl") {
 			fin >> op;
 			for (unsigned int i = 0; i < texName.size(); i++) {
 				if (op == texName[i]) {
-					pic(texDir[i].c_str());
+					pic(texInfo[i]);
+					offset.push_back(pair<int, int>(this->pos.size() / 3, i));
 					break;
 				}
 			}
@@ -387,7 +429,21 @@ Texture *Texture::load(const char *filename) {
 			delete buf;
 		}
 	}
-	
+
+	for (unsigned int i = 0; i < texName.size(); i++) {
+		GLuint tmp;
+		glGenTextures(1, &tmp);
+		this->texName.push_back(tmp);
+	}
+
+	assert(this->texName.size() == src.size());
+	for (unsigned int i = 0; i < this->texName.size(); i++) {
+		glBindTexture(GL_TEXTURE_2D, this->texName[i]);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, src[i].sizeX, src[i].sizeY, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, src[i].data);
+	}
+
 	return this;
 }
 void Texture::shadow() {
@@ -425,15 +481,9 @@ void Texture::show() {
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), NULL);
 	glBindVertexArray(0);
-
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, texName);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, src[0].sizeX, src[0].sizeY, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, src[0].data);
 	
 	if(diy){
-		for (int i = 0; i < light.size(); i++) {
+		for (unsigned int i = 0; i < light.size(); i++) {
 			char tmp[64];
 			sprintf(tmp, "u_lightInfo[%d].u_lightDiff", i);
 			texShader->setVec3(tmp, kd * light[i]->diffuse);
@@ -446,17 +496,32 @@ void Texture::show() {
 
 	texShader->setInt("u_enLight", !pure);
 	texShader->setMat4("u_modelMatrix", model);
-	for (int i = 0; i < light.size(); i++) {
+	glm::mat4x4 inv = glm::transpose(glm::inverse(model));
+	texShader->setMat4("u_normalMatrix", inv);
+	for (unsigned int i = 0; i < light.size(); i++) {
 		char tmp[64];
 		sprintf(tmp, "u_shadowMap[%d]", i);
-		texShader->setInt(tmp, i + 1);
+		texShader->setInt(tmp, i + 2);
 	}
 	texShader->setInt("u_textureMap", 0);
 	glBindVertexArray(vao);
-	glDrawArrays(GL_TRIANGLES, 0, pos.size() / 3);
+
+	glActiveTexture(GL_TEXTURE0);
+
+	int tmpSum = 0;
+	for (unsigned int i = 0; i < offset.size(); i++) {
+		glBindTexture(GL_TEXTURE_2D, texName[offset[i].second]);
+		if (i != offset.size() - 1) {
+			glDrawArrays(GL_TRIANGLES, tmpSum, offset[i+1].first);
+			tmpSum += offset[i+1].first - offset[i].first;
+		}
+		else {
+			glDrawArrays(GL_TRIANGLES, tmpSum, this->pos.size() / 3 - offset[i].first);
+		}
+	}
 
 	if (diy) {
-		for (int i = 0; i < light.size(); i++) {
+		for (unsigned int i = 0; i < light.size(); i++) {
 			char tmp[64];
 			sprintf(tmp, "u_lightInfo[%d].u_lightDiff", i);
 			texShader->setVec3(tmp, light[i]->diffuse);
@@ -468,158 +533,14 @@ void Texture::show() {
 	}
 }
 
-Mix *Mix::load(const char *filename) {
-	std::ifstream fin;
-
-	fin.open(filename);
-	if (fin.is_open() == FALSE)return NULL;
-
-	string op;
-	float num1, num2, num3;
-
-	vector<float>pos;
-	vector<float>color;
-	vector<float>coord;
-	vector<float>normal;
-
-	vector<string> texName;
-	vector<string> texDir;
-
-	bool tex = false;
-
-	while (fin >> op) {
-		if (op == "v") {
-			fin >> num1 >> num2 >> num3;
-			pos.push_back(num1);
-			pos.push_back(num3);
-			pos.push_back(num2);
-		}
-		else if (op == "vc") {
-			fin >> num1 >> num2 >> num3;
-			color.push_back(num1);
-			color.push_back(num2);
-			color.push_back(num3);
-		}
-		else if (op == "vt") {
-			fin >> num1 >> num2;
-			coord.push_back(num1);
-			coord.push_back(num2);
-		}
-		else if (op == "vn") {
-			fin >> num1 >> num2 >> num3;
-			normal.push_back(num1);
-			normal.push_back(num2);
-			normal.push_back(num3);
-		}
-		else if (op == "mtllib") {
-			std::ifstream min;
-			string path = string(filename);
-			unsigned int tmp = path.find_last_of('/');
-			for (unsigned int i = path.length() - 1; i > tmp; i--)
-				path.pop_back();
-			fin >> op;
-			path += op;
-
-			min.open(path);
-			if (min.is_open() == FALSE)continue;
-
-			bool complete = true;
-			while (min >> op) {
-
-			}
-		}
-		else if (op == "usemtl") {
-
-		}
-		else if (op == "f") {
-			string v1, v2, v3;
-			int tmp1 = 0, tmp2 = 0, tmp3 = 0;
-
-			fin >> v1 >> v2 >> v3;
-			num1 = (float)atoi(v1.c_str() + tmp1);
-			num2 = (float)atoi(v2.c_str() + tmp2);
-			num3 = (float)atoi(v3.c_str() + tmp3);
-			this->element.pushPos(pos[(int)num1 * 3 - 3], pos[(int)num1 * 3 - 2], pos[(int)num1 * 3 - 1]);
-			this->element.pushPos(pos[(int)num2 * 3 - 3], pos[(int)num2 * 3 - 2], pos[(int)num2 * 3 - 1]);
-			this->element.pushPos(pos[(int)num3 * 3 - 3], pos[(int)num3 * 3 - 2], pos[(int)num3 * 3 - 1]);
-			this->texture.pushPos(pos[(int)num1 * 3 - 3], pos[(int)num1 * 3 - 2], pos[(int)num1 * 3 - 1]);
-			this->texture.pushPos(pos[(int)num2 * 3 - 3], pos[(int)num2 * 3 - 2], pos[(int)num2 * 3 - 1]);
-			this->texture.pushPos(pos[(int)num3 * 3 - 3], pos[(int)num3 * 3 - 2], pos[(int)num3 * 3 - 1]);
-
-			tmp1 = v1.find_first_of('/', tmp1) + 1;
-			tmp2 = v2.find_first_of('/', tmp2) + 1;
-			tmp3 = v3.find_first_of('/', tmp3) + 1;
-			if (tmp1 == 0 || tmp2 == 0 || tmp3 == 0) {
-				this->texture.pushCoord();
-				this->texture.pushCoord();
-				this->texture.pushCoord();
-			}
-			else {
-				num1 = (float)atoi(v1.c_str() + tmp1);
-				num2 = (float)atoi(v2.c_str() + tmp2);
-				num3 = (float)atoi(v3.c_str() + tmp3);
-				this->texture.pushCoord(coord[(int)num1 * 2 - 2], coord[(int)num1 * 2 - 1]);
-				this->texture.pushCoord(coord[(int)num2 * 2 - 2], coord[(int)num2 * 2 - 1]);
-				this->texture.pushCoord(coord[(int)num3 * 2 - 2], coord[(int)num3 * 2 - 1]);
-			}
-
-			tmp1 = v1.find_first_of('/', tmp1) + 1;
-			tmp2 = v2.find_first_of('/', tmp2) + 1;
-			tmp3 = v3.find_first_of('/', tmp3) + 1;
-			if (tmp1 == 0 || tmp2 == 0 || tmp3 == 0) {
-				int p1 = atoi(v1.c_str());
-				int p2 = atoi(v2.c_str());
-				int p3 = atoi(v3.c_str());
-				glm::vec3 edge1(pos[p2 * 3 - 3] - pos[p1 * 3 - 3],
-					pos[p2 * 3 - 2] - pos[p1 * 3 - 2],
-					pos[p2 * 3 - 1] - pos[p1 * 3 - 1]);
-				glm::vec3 edge2(pos[p3 * 3 - 3] - pos[p2 * 3 - 3],
-					pos[p3 * 3 - 2] - pos[p2 * 3 - 2],
-					pos[p3 * 3 - 1] - pos[p2 * 3 - 1]);
-				glm::vec3 norm(edge2.y *edge1.z - edge1.y*edge2.z,
-					edge2.z*edge1.x - edge1.z*edge2.x,
-					edge2.x*edge1.y - edge1.x*edge2.y);
-				this->element.pushNormal(norm.x, norm.y, norm.z);
-				this->element.pushNormal(norm.x, norm.y, norm.z);
-				this->element.pushNormal(norm.x, norm.y, norm.z);
-				this->texture.pushNormal(norm.x, norm.y, norm.z);
-				this->texture.pushNormal(norm.x, norm.y, norm.z);
-				this->texture.pushNormal(norm.x, norm.y, norm.z);
-			}
-			else {
-				num1 = (float)atoi(v1.c_str() + tmp1);
-				num2 = (float)atoi(v2.c_str() + tmp2);
-				num3 = (float)atoi(v3.c_str() + tmp3);
-				this->element.pushNormal(normal[(int)num1 * 3 - 3], normal[(int)num1 * 3 - 2], normal[(int)num1 * 3 - 1]);
-				this->element.pushNormal(normal[(int)num2 * 3 - 3], normal[(int)num2 * 3 - 2], normal[(int)num2 * 3 - 1]);
-				this->element.pushNormal(normal[(int)num3 * 3 - 3], normal[(int)num3 * 3 - 2], normal[(int)num3 * 3 - 1]);
-				this->texture.pushNormal(normal[(int)num1 * 3 - 3], normal[(int)num1 * 3 - 2], normal[(int)num1 * 3 - 1]);
-				this->texture.pushNormal(normal[(int)num2 * 3 - 3], normal[(int)num2 * 3 - 2], normal[(int)num2 * 3 - 1]);
-				this->texture.pushNormal(normal[(int)num3 * 3 - 3], normal[(int)num3 * 3 - 2], normal[(int)num3 * 3 - 1]);
-			}
-		}
-	}
-	return this;
-}
-void Mix::shadow() {
-	element.shadow();
-	texture.shadow();
-}
-void Mix::show() {
-	element.show();
-	texture.show();
-}
-
 void Scene::shadow() {
-	for (auto &e : elements)e.shadow();
-	for (auto &t : textures)t.shadow();
-	for (auto &m : mixes)m.shadow();
+	for (auto &e : elements)e->shadow();
+	for (auto &t : textures)t->shadow();
 }
 void Scene::show() {
-	for (auto &e : elements)e.show();
-	for (auto &t : textures)t.show();
+	for (auto &e : elements)e->show();
+	for (auto &t : textures)t->show();
 }
-
 
 void Element::addBall(float radius, float slice) {
 	if (slice < 1.f)return;
@@ -638,8 +559,8 @@ void Element::addBall(float radius, float slice) {
 		}
 	}
 
-	int row = 180 / angleSpan + 1;
-	int col = 360 / angleSpan;
+	int row = int(180 / angleSpan) + 1;
+	int col = int(360 / angleSpan);
 	int k = col*(row - 2) * 6 * 8;
 	int count = 0;
 	for (int i = 0; i < row; i++) {
@@ -687,4 +608,3 @@ void Element::addBall(float radius, float slice) {
 		}
 	}
 }
-
