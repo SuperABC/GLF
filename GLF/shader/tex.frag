@@ -51,7 +51,14 @@ float ShadowCalculation(vec4 posFromLight, int idx) {
 
 vec3 LightCalculation(int idx){
     vec3 fragColor = texture2D(u_textureMap, v_Coord).rgb;
-    vec3 fragNormal = normalize(v_Normal);
+    vec3 fragNormal;
+	if(u_enBump == 0) {
+		fragNormal = normalize(v_Normal);
+	}
+	else {
+		fragNormal = texture2D(u_bumpMap, v_Coord).rgb;
+	}
+
     vec3 lightColor = u_lightInfo[idx].u_lightDiff;
     vec3 ambient = u_lightInfo[idx].u_lightAmb;
     vec3 lightDir = normalize(u_lightInfo[idx].u_lightPos - v_Position);
