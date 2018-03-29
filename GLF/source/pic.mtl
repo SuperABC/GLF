@@ -2,7 +2,7 @@
 
 newmtl pic
 map_Kd source/pic.jpg
-map_bump source/pic2.jpg
+map_Bump source/pic2.jpg
 
 newmtl pic2
 Kd 0.5 0.5 0.5
