@@ -199,8 +199,6 @@ void Element::show() {
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), NULL);
 	glBindVertexArray(0);
 
-	elementShader->setInt("u_enBump", bump);
-
 	if(diy){
 		for (unsigned int i = 0; i < light.size(); i++) {
 			char tmp[64];
@@ -239,13 +237,6 @@ void Element::show() {
 }
 
 void Texture::pic(texStr s) {
-	const char *fileName = s.texDir.c_str();
-
-	CImage *img = new CImage;
-	if (!fileName) {
-		return;
-	}
-
 	if (s.pure == true) {
 		Bitmap bmp;
 		bmp.sizeX = 1;
@@ -256,13 +247,20 @@ void Texture::pic(texStr s) {
 		bmp.data[1] = char(s.Kd[1] * 255);
 		bmp.data[2] = char(s.Kd[2] * 255);
 
-		src.push_back(bmp);
+		src = (bmp);
 		return;
 	}
 
+	src = bmp(s.texDir);
+}
+Bitmap Texture::bmp(string s) {
+	const char *fileName = s.c_str();
+
+	CImage *img = new CImage;
+
 	HRESULT hr = img->Load(fileName);
 	if (!SUCCEEDED(hr)) {
-		return;
+		exit(0);
 	}
 	Bitmap bmp;
 	bmp.sizeX = img->GetWidth();
@@ -270,7 +268,7 @@ void Texture::pic(texStr s) {
 	if (img->GetPitch()<0)bmp.data = (unsigned char *)img->GetBits() + (img->GetPitch()*(img->GetHeight() - 1));
 	else bmp.data = (unsigned char *)img->GetBits();
 
-	src.push_back(bmp);
+	return bmp;
 }
 Texture *Texture::load(const char *filename) {
 	std::ifstream fin;
@@ -390,6 +388,12 @@ Texture *Texture::load(const char *filename) {
 					texInfo.push_back(texStr(op));
 					complete = true;
 				}
+				else if (op == "map_Bump") {
+					bump = true;
+					assert(complete);
+					min >> op;
+					texInfo[texInfo.size() - 1].bumpDir = op;
+				}
 				else if (op == "Kd") {
 					min >> num1 >> num2 >> num3;
 					if (complete) {
@@ -417,7 +421,6 @@ Texture *Texture::load(const char *filename) {
 			fin >> op;
 			for (unsigned int i = 0; i < texName.size(); i++) {
 				if (op == texName[i]) {
-					pic(texInfo[i]);
 					offset.push_back(pair<int, int>(this->pos.size() / 3, i));
 					break;
 				}
@@ -434,14 +437,27 @@ Texture *Texture::load(const char *filename) {
 		GLuint tmp;
 		glGenTextures(1, &tmp);
 		this->texName.push_back(tmp);
-	}
 
-	assert(this->texName.size() == src.size());
-	for (unsigned int i = 0; i < this->texName.size(); i++) {
-		glBindTexture(GL_TEXTURE_2D, this->texName[i]);
+		pic(texInfo[i]);
+
+		if (texInfo[i].bumpDir != "") {
+			GLuint tmp;
+			glGenTextures(1, &tmp);
+			this->bumpName.push_back(tmp);
+
+			Bitmap bumpSrc = bmp(texInfo[i].bumpDir);
+
+			glBindTexture(GL_TEXTURE_2D, tmp);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, bumpSrc.sizeX, bumpSrc.sizeY, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, bumpSrc.data);
+		}
+		else this->bumpName.push_back(0);
+
+		glBindTexture(GL_TEXTURE_2D, this->texName[this->texName.size()-1]);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, src[i].sizeX, src[i].sizeY, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, src[i].data);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, src.sizeX, src.sizeY, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, src.data);
 	}
 
 	return this;
@@ -481,7 +497,9 @@ void Texture::show() {
 	glEnableVertexAttribArray(2);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), NULL);
 	glBindVertexArray(0);
-	
+
+	texShader->setInt("u_enBump", bump);
+
 	if(diy){
 		for (unsigned int i = 0; i < light.size(); i++) {
 			char tmp[64];
@@ -504,15 +522,24 @@ void Texture::show() {
 		texShader->setInt(tmp, i + 2);
 	}
 	texShader->setInt("u_textureMap", 0);
+	texShader->setInt("u_bumpMap", 1);
 	glBindVertexArray(vao);
 
-	glActiveTexture(GL_TEXTURE0);
 
 	int tmpSum = 0;
 	for (unsigned int i = 0; i < offset.size(); i++) {
+		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, texName[offset[i].second]);
+		if (bumpName[offset[i].second] != 0) {
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, bumpName[offset[i].second]);
+			texShader->setInt("u_enBump", 1);
+		}
+		else {
+			texShader->setInt("u_enBump", 0);
+		}
 		if (i != offset.size() - 1) {
-			glDrawArrays(GL_TRIANGLES, tmpSum, offset[i+1].first);
+			glDrawArrays(GL_TRIANGLES, tmpSum, offset[i+1].first - offset[i].first);
 			tmpSum += offset[i+1].first - offset[i].first;
 		}
 		else {
@@ -542,6 +569,11 @@ void Scene::show() {
 	for (auto &t : textures)t->show();
 }
 
+void Element::setColor(float r, float g, float b) {
+	this->r = r;
+	this->g = g;
+	this->b = b;
+}
 void Element::addBall(float radius, float slice) {
 	if (slice < 1.f)return;
 
@@ -569,7 +601,7 @@ void Element::addBall(float radius, float slice) {
 				k = i*col + j;
 				glm::vec3 norm = glm::normalize(glm::vec3(tmp[(k + col) * 3], tmp[(k + col) * 3 + 1], tmp[(k + col) * 3 + 2]));
 				pushPos(tmp[(k + col) * 3], tmp[(k + col) * 3 + 1], tmp[(k + col) * 3 + 2]);
-				pushColor(1.f, 1.f, 1.f);
+				pushColor(r, g, b);
 				pushNormal(norm.x, norm.y, norm.z);
 
 				int index = k + 1;
@@ -577,19 +609,19 @@ void Element::addBall(float radius, float slice) {
 					index -= col;
 				norm = glm::normalize(glm::vec3(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]));
 				pushPos(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]);
-				pushColor(1.f, 1.f, 1.f);
+				pushColor(r, g, b);
 				pushNormal(norm.x, norm.y, norm.z);
 
 				norm = glm::normalize(glm::vec3(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]));
 				pushPos(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]);
-				pushColor(1.f, 1.f, 1.f);
+				pushColor(r, g, b);
 				pushNormal(norm.x, norm.y, norm.z);
 			}
 			for (int j = 0; j < col; j++) {
 				k = i*col + j;
 				glm::vec3 norm = glm::normalize(glm::vec3(tmp[(k - col) * 3], tmp[(k - col) * 3 + 1], tmp[(k - col) * 3 + 2]));
 				pushPos(tmp[(k - col) * 3], tmp[(k - col) * 3 + 1], tmp[(k - col) * 3 + 2]);
-				pushColor(1.f, 1.f, 1.f);
+				pushColor(r, g, b);
 				pushNormal(norm.x, norm.y, norm.z);
 
 				int index = k - 1;
@@ -597,13 +629,209 @@ void Element::addBall(float radius, float slice) {
 					index += col;
 				norm = glm::normalize(glm::vec3(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]));
 				pushPos(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]);
-				pushColor(1.f, 1.f, 1.f);
+				pushColor(r, g, b);
 				pushNormal(norm.x, norm.y, norm.z);
 
 				norm = glm::normalize(glm::vec3(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]));
 				pushPos(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]);
-				pushColor(1.f, 1.f, 1.f);
+				pushColor(r, g, b);
 				pushNormal(norm.x, norm.y, norm.z);
+			}
+		}
+	}
+}
+void Element::addBox(float width) {
+	float half = width / 2;
+
+	pushPos(half, half, half);
+	pushPos(half, -half, half);
+	pushPos(half, -half, -half);
+	pushPos(half, half, half);
+	pushPos(half, -half, -half);
+	pushPos(half, half, -half);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushNormal(1.f, 0.f, 0.f);
+	pushNormal(1.f, 0.f, 0.f);
+	pushNormal(1.f, 0.f, 0.f);
+	pushNormal(1.f, 0.f, 0.f);
+	pushNormal(1.f, 0.f, 0.f);
+	pushNormal(1.f, 0.f, 0.f);
+	pushPos(-half, half, half);
+	pushPos(-half, -half, half);
+	pushPos(-half, -half, -half);
+	pushPos(-half, half, half);
+	pushPos(-half, -half, -half);
+	pushPos(-half, half, -half);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushNormal(-1.f, 0.f, 0.f);
+	pushNormal(-1.f, 0.f, 0.f);
+	pushNormal(-1.f, 0.f, 0.f);
+	pushNormal(-1.f, 0.f, 0.f);
+	pushNormal(-1.f, 0.f, 0.f);
+	pushNormal(-1.f, 0.f, 0.f);
+
+	pushPos(half, half, half);
+	pushPos(-half, half, half);
+	pushPos(-half, half, -half);
+	pushPos(half, half, half);
+	pushPos(-half, half, -half);
+	pushPos(half, half, -half);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushNormal(0.f, 1.f, 0.f);
+	pushNormal(0.f, 1.f, 0.f);
+	pushNormal(0.f, 1.f, 0.f);
+	pushNormal(0.f, 1.f, 0.f);
+	pushNormal(0.f, 1.f, 0.f);
+	pushNormal(0.f, 1.f, 0.f);
+	pushPos(half, -half, half);
+	pushPos(-half, -half, half);
+	pushPos(-half, -half, -half);
+	pushPos(half, -half, half);
+	pushPos(-half, -half, -half);
+	pushPos(half, -half, -half);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushNormal(0.f, -1.f, 0.f);
+	pushNormal(0.f, -1.f, 0.f);
+	pushNormal(0.f, -1.f, 0.f);
+	pushNormal(0.f, -1.f, 0.f);
+	pushNormal(0.f, -1.f, 0.f);
+	pushNormal(0.f, -1.f, 0.f);
+
+	pushPos(half, half, half);
+	pushPos(-half, half, half);
+	pushPos(-half, -half, half);
+	pushPos(half, half, half);
+	pushPos(-half, -half, half);
+	pushPos(half, -half, half);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushNormal(0.f, 0.f, 1.f);
+	pushNormal(0.f, 0.f, 1.f);
+	pushNormal(0.f, 0.f, 1.f);
+	pushNormal(0.f, 0.f, 1.f);
+	pushNormal(0.f, 0.f, 1.f);
+	pushNormal(0.f, 0.f, 1.f);
+	pushPos(half, half, -half);
+	pushPos(-half, half, -half);
+	pushPos(-half, -half, -half);
+	pushPos(half, half, -half);
+	pushPos(-half, -half, -half);
+	pushPos(half, -half, -half);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushColor(r, g, b);
+	pushNormal(0.f, 0.f, -1.f);
+	pushNormal(0.f, 0.f, -1.f);
+	pushNormal(0.f, 0.f, -1.f);
+	pushNormal(0.f, 0.f, -1.f);
+	pushNormal(0.f, 0.f, -1.f);
+	pushNormal(0.f, 0.f, -1.f);
+}
+
+void Texture::setSrc(string src) {
+	GLuint tmp;
+	glGenTextures(1, &tmp);
+	this->texName.push_back(tmp);
+
+	this->src = bmp(src);
+	bumpName.push_back(0);
+
+	glBindTexture(GL_TEXTURE_2D, this->texName[this->texName.size() - 1]);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, this->src.sizeX, this->src.sizeY, 0, GL_BGR_EXT, GL_UNSIGNED_BYTE, this->src.data);
+	
+	offset.push_back(pair<int, int>(this->pos.size() / 3, this->texName.size() - 1));
+}
+void Texture::addBall(float radius, float slice) {
+	if (slice < 1.f)return;
+
+	float angleSpan = 45.f / slice;
+	vector<float>tmp;
+	for (float i = -90; i <= 90; i += angleSpan) {
+		for (float j = 0; j < 360; j += angleSpan) {
+			float r = radius * glm::cos(glm::radians(i));
+			float x = r * glm::cos(glm::radians(j));
+			float y = radius * glm::sin(glm::radians(i));
+			float z = r * glm::sin(glm::radians(j));
+			tmp.push_back(x);
+			tmp.push_back(y);
+			tmp.push_back(z);
+		}
+	}
+
+	int row = int(180 / angleSpan) + 1;
+	int col = int(360 / angleSpan);
+	int k = col * (row - 2) * 6 * 8;
+	int count = 0;
+	for (int i = 0; i < row; i++) {
+		if (i != 0 && i != row - 1) {
+			for (int j = 0; j < col; j++) {
+				k = i * col + j;
+				glm::vec3 norm = glm::normalize(glm::vec3(tmp[(k + col) * 3], tmp[(k + col) * 3 + 1], tmp[(k + col) * 3 + 2]));
+				pushPos(tmp[(k + col) * 3], tmp[(k + col) * 3 + 1], tmp[(k + col) * 3 + 2]);
+				pushNormal(norm.x, norm.y, norm.z);
+				pushCoord(j*1.0 / col, 1.0 / row);
+
+				int index = k + 1;
+				if (j == col - 1)
+					index -= col;
+				norm = glm::normalize(glm::vec3(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]));
+				pushPos(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]);
+				pushNormal(norm.x, norm.y, norm.z);
+				pushCoord((j + 1)*1.0 / col, i*1.0 / row);
+
+				norm = glm::normalize(glm::vec3(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]));
+				pushPos(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]);
+				pushNormal(norm.x, norm.y, norm.z);
+				pushCoord(j*1.0 / col, i*1.0 / row);
+			}
+			for (int j = 0; j < col; j++) {
+				k = i * col + j;
+				glm::vec3 norm = glm::normalize(glm::vec3(tmp[(k - col) * 3], tmp[(k - col) * 3 + 1], tmp[(k - col) * 3 + 2]));
+				pushPos(tmp[(k - col) * 3], tmp[(k - col) * 3 + 1], tmp[(k - col) * 3 + 2]);
+				pushNormal(norm.x, norm.y, norm.z);
+				pushCoord(j*1.0 / col, 1.0 / row);
+
+				int index = k - 1;
+				if (j == 0)
+					index += col;
+				norm = glm::normalize(glm::vec3(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]));
+				pushPos(tmp[index * 3], tmp[index * 3 + 1], tmp[index * 3 + 2]);
+				pushNormal(norm.x, norm.y, norm.z);
+				pushCoord((j - 1)*1.0 / col, i*1.0 / row);
+
+				norm = glm::normalize(glm::vec3(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]));
+				pushPos(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]);
+				pushNormal(norm.x, norm.y, norm.z);
+				pushCoord(j*1.0 / col, i*1.0 / row);
 			}
 		}
 	}
