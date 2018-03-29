@@ -35,7 +35,6 @@ private:
 
 	bool diy = false;//Enable light feature.
 	bool pure = false;//Draw pure color.
-	bool bump = false;//Enable bump map.
 
 	void pushPos(float pos1 = 0, float pos2 = 0, float pos3 = 0) {
 		pos.push_back(pos1);
@@ -65,8 +64,7 @@ private:
 		return pos.size() / 3;
 	}
 
-	friend class Mix;
-
+	float r = 1.f, g = 1.f, b = 1.f;
 public:
 	glm::mat4 model;
 
@@ -128,7 +126,9 @@ public:
 	void shadow();
 	void show();
 
+	void setColor(float r, float g, float b);
 	void addBall(float radius, float slice);
+	void addBox(float width);
 };
 class Texture {
 private:
@@ -138,6 +138,7 @@ private:
 
 	GLuint vao, svao;
 	vector<GLuint> texName;
+	vector<GLuint> bumpName;
 	GLuint vboHandles[3],
 		positionBufferHandle, coordBufferHandle, normalBufferHandle;
 	GLuint spositionBufferHandle;
@@ -153,11 +154,12 @@ private:
 	public:
 		bool pure;
 		string texDir = "";
+		string bumpDir = "";
 		float *Kd = NULL;
 		float *Ka = NULL;
 		float *Ks = NULL;
 
-		texStr(string dir) :texDir(dir), pure(false) {}
+		texStr(string dir, string b = "") :texDir(dir), pure(false), bumpDir(b) {}
 		texStr(float *d, float *a, float *s) :Kd(d), Ka(a), Ks(s), pure(true) {}
 	};
 
@@ -186,8 +188,9 @@ private:
 	}
 	
 	void pic(texStr s);
+	Bitmap bmp(string s);
 public:
-	vector<Bitmap> src;
+	Bitmap src;
 	vector<pair<int, int>> offset;
 
 	glm::mat4 model;
@@ -221,6 +224,10 @@ public:
 	Texture *load(const char *filename);
 	void shadow();
 	void show();
+
+	void setSrc(string src);
+	void addBall(float radius, float slice);
+	void addBox(float width);
 };
 
 class Scene {
