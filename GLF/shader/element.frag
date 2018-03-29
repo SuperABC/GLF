@@ -21,9 +21,7 @@ uniform int u_enLight;
 uniform int u_lightNum;
 uniform Light u_lightInfo[MAX_LIGHT];
 
-uniform int u_enBump;
 uniform sampler2D u_shadowMap[MAX_LIGHT];
-uniform sampler2D u_bumpMap;
 
 uniform vec3 u_eyePos;
 
